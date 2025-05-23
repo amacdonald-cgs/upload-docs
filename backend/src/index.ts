@@ -7,7 +7,7 @@ import FormData from 'form-data';
 import { initializeDatabase, insertDocument, updateDocumentStatusAndText, getDocumentById } from './db';
 
 // Initialize Express application
-const app = express();
+export const app = express();
 // Define the port for the server, fallback to 3001 if not specified in environment
 const port = process.env.PORT || 3001;
 // Define the URL for the Tika service, fallback to local Docker service if not specified
@@ -176,7 +176,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 
 // Asynchronous function to start the server.
 // This ensures that database initialization is complete before the server starts listening for requests.
-const startServer = async () => {
+export const startServer = async () => {
   try {
     await initializeDatabase(); // Initialize database connection and tables
     app.listen(port, () => {
@@ -188,5 +188,7 @@ const startServer = async () => {
   }
 };
 
-// Start the server
-startServer();
+// Start the server if this file is run directly
+if (require.main === module) {
+  startServer();
+}
