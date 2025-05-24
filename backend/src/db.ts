@@ -59,6 +59,20 @@ export const initializeDatabase = async () => {
     await client.query(createTableQuery);
     logger.info('Table "documents" checked/created successfully.');
 
+    // SQL to create the 'prompts' table if it doesn't already exist.
+    const createPromptsTableQuery = `
+      CREATE TABLE IF NOT EXISTS prompts (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        prompt_text TEXT NOT NULL,
+        model_provider VARCHAR(100),
+        model_name VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await client.query(createPromptsTableQuery);
+    logger.info('Table "prompts" checked/created successfully.');
+
   } catch (err) {
     logger.error(`Error initializing database or creating table: ${err}`);
     throw err; // Re-throw to be caught by application startup logic
@@ -127,4 +141,81 @@ export const listDocuments = async () => {
     'SELECT id, filename, originalname, mimetype, size, status, upload_timestamp, processing_timestamp FROM documents ORDER BY upload_timestamp DESC'
   );
   return result.rows;
+};
+
+// -- Prompt Library Functions --
+
+/**
+ * @interface Prompt
+ * Defines the structure for a prompt object retrieved from the database.
+ */
+export interface Prompt {
+  id: number;
+  name: string;
+  prompt_text: string;
+  model_provider?: string | null;
+  model_name?: string | null;
+  created_at: Date;
+}
+
+/**
+ * Creates a new prompt in the 'prompts' table.
+ * @param name - The unique name of the prompt.
+ * @param promptText - The main text content of the prompt.
+ * @param modelProvider - (Optional) The preferred model provider (e.g., 'openai').
+ * @param modelName - (Optional) The preferred model name (e.g., 'gpt-3.5-turbo').
+ * @returns A Promise resolving to the ID of the newly created prompt.
+ * @throws Error if the prompt name already exists or if there's a database error.
+ */
+export const createPrompt = async (name: string, promptText: string, modelProvider?: string, modelName?: string): Promise<number> => {
+  try {
+    const result = await query(
+      'INSERT INTO prompts (name, prompt_text, model_provider, model_name) VALUES ($1, $2, $3, $4) RETURNING id',
+      [name, promptText, modelProvider, modelName]
+    );
+    logger.info(`Prompt "${name}" created successfully with ID: ${result.rows[0].id}`);
+    return result.rows[0].id;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === '23505') { // Unique violation for 'name'
+      logger.error(`Error creating prompt: Prompt name "${name}" already exists.`);
+      throw new Error(`Prompt name "${name}" already exists.`);
+    }
+    logger.error(`Error creating prompt "${name}": ${error}`);
+    throw error;
+  }
+};
+
+/**
+ * Retrieves a prompt by its unique name from the 'prompts' table.
+ * @param name - The name of the prompt to retrieve.
+ * @returns A Promise resolving to the Prompt object, or null if not found.
+ */
+export const getPromptByName = async (name: string): Promise<Prompt | null> => {
+  const result = await query('SELECT * FROM prompts WHERE name = $1', [name]);
+  if (result.rows.length === 0) {
+    return null;
+  }
+  return result.rows[0] as Prompt;
+};
+
+/**
+ * Retrieves a prompt by its ID from the 'prompts' table.
+ * @param id - The ID of the prompt to retrieve.
+ * @returns A Promise resolving to the Prompt object, or null if not found.
+ */
+export const getPromptById = async (id: number): Promise<Prompt | null> => {
+  const result = await query('SELECT * FROM prompts WHERE id = $1', [id]);
+  if (result.rows.length === 0) {
+    return null;
+  }
+  return result.rows[0] as Prompt;
+};
+
+/**
+ * Lists all available prompts from the 'prompts' table, ordered by creation date.
+ * @returns A Promise resolving to an array of Prompt objects.
+ */
+export const listPrompts = async (): Promise<Prompt[]> => {
+  const result = await query('SELECT * FROM prompts ORDER BY created_at DESC');
+  return result.rows as Prompt[];
 };

@@ -90,3 +90,106 @@ Here are the primary API endpoints:
 - `Dockerfile`: For building the backend service Docker image.
 - `tsconfig.json`: TypeScript compiler configuration.
 - `package.json`: Project dependencies and scripts.
+- `src/prompt_agent/`: Contains the source code for the Prompt Agent service.
+    - `llm_connector.ts`: Interface and implementation for connecting to Large Language Models (e.g., OpenAI).
+    - `service.ts`: Core logic for prompt processing, enhancement, and using the LLM provider.
+    - `worker.ts`: RabbitMQ consumer that listens for prompt tasks and processes them.
+    - `routes.ts`: API routes for submitting prompt tasks.
+    - `db.ts` (in `src/`): Also includes functions for managing the `prompts` table in the database.
+
+## Prompt Agent Service
+
+The Prompt Agent service is a new component responsible for processing textual prompts using Large Language Models (LLMs). It allows for dynamic prompt management via a database library, asynchronous task processing via RabbitMQ, and interaction with LLM providers like OpenAI.
+
+### Features
+
+-   **LLM Integration**: Connects to LLM providers (initially OpenAI) to generate text completions.
+-   **Database-backed Prompt Library**: Prompts can be stored and managed in a PostgreSQL database table (`prompts`). This allows for easy updates and additions without code changes.
+-   **Asynchronous Processing**: Uses RabbitMQ for a task queue (`prompt_tasks_queue`), allowing API requests to return quickly while prompts are processed in the background by a worker.
+-   **Configurable Models**: Supports specifying different LLM models per request or per stored prompt.
+-   **Prompt Enhancement**: Basic prompt enhancement capabilities.
+
+### Configuration (Environment Variables)
+
+In addition to the main backend environment variables, the Prompt Agent requires:
+
+-   `RABBITMQ_URL`: Connection string for RabbitMQ (e.g., `amqp://user:password@rabbitmq:5672`). This is set up in `docker-compose.yml`.
+-   `OPENAI_API_KEY`: Your API key for accessing OpenAI services. This **must** be set in your environment for the Prompt Agent to function. Add it to your local environment setup or directly in `docker-compose.yml` (not recommended for sensitive keys in committed files).
+    Example for `docker-compose.yml` (use with caution or environment-specific overrides):
+    ```yaml
+    services:
+      backend:
+        environment:
+          # ... other variables
+          OPENAI_API_KEY: "your_actual_openai_api_key_here"
+    ```
+
+### API Endpoints for Prompt Agent
+
+-   **`POST /api/prompts/submit`**:
+    -   Submits a prompt processing request to the RabbitMQ queue.
+    -   **Request Body (JSON)**:
+        -   `promptText` (string, optional): The main text of the prompt.
+        -   `promptId` (string, optional): The `name` of a predefined prompt from the database library. If both `promptId` and `promptText` are provided, `promptText` will be appended to the text of the prompt retrieved by `promptId`. One of `promptText` or `promptId` is required.
+        -   `requestedModel` (string, optional): The specific LLM model to use (e.g., "gpt-4", "gpt-3.5-turbo"). Overrides any model defined in a database prompt.
+        -   `enhance` (boolean, optional): Whether to apply basic prompt enhancement (default: `false`).
+    -   **Success Response (202 Accepted)**:
+        ```json
+        {
+          "message": "Prompt request received and is being processed."
+        }
+        ```
+    -   **Error Responses**:
+        -   `400 Bad Request`: If neither `promptText` nor `promptId` is provided.
+        -   `503 Service Unavailable`: If RabbitMQ is not available or the queue is full.
+    -   **Example `curl` request**:
+        ```bash
+        curl -X POST -H "Content-Type: application/json" \
+        -d '{ "promptId": "greeting_prompt", "promptText": "for a new user named Alex." }' \
+        http://localhost:3001/api/prompts/submit
+        ```
+        Or using direct `promptText`:
+        ```bash
+        curl -X POST -H "Content-Type: application/json" \
+        -d '{ "promptText": "Explain the concept of asynchronous programming in Node.js.", "requestedModel": "gpt-3.5-turbo" }' \
+        http://localhost:3001/api/prompts/submit
+        ```
+
+### RabbitMQ Worker
+
+-   The worker (`src/prompt_agent/worker.ts`) automatically starts when the backend application initializes.
+-   It listens for messages on the `prompt_tasks_queue`.
+-   Messages are processed using the `PromptService`, which interacts with the LLM.
+-   The worker handles message acknowledgment (`ack`) upon successful processing or rejection (`nack`) if an error occurs that prevents processing (e.g., invalid message format, failure from LLM). Rejected messages (due to processing errors) are not re-queued to avoid infinite loops with bad messages.
+-   It includes robust reconnection logic for RabbitMQ.
+
+### Managing Prompts in the Database
+
+Prompts are stored in the `prompts` table in the PostgreSQL database. The table includes columns such as:
+- `id` (SERIAL PRIMARY KEY)
+- `name` (VARCHAR, UNIQUE NOT NULL) - Used as `promptId` in API requests.
+- `prompt_text` (TEXT NOT NULL)
+- `model_provider` (VARCHAR, optional)
+- `model_name` (VARCHAR, optional)
+- `created_at` (TIMESTAMP)
+
+**Adding Prompts:**
+
+Currently, prompts need to be added directly to the database. You can use `psql` or any PostgreSQL client.
+
+**Example using `psql` (assuming you can connect to the database, e.g., via Docker):**
+
+1.  Connect to the PostgreSQL container:
+    ```bash
+    docker-compose exec db psql -U user -d document_processing
+    ```
+2.  Insert a new prompt:
+    ```sql
+    INSERT INTO prompts (name, prompt_text, model_name, model_provider) VALUES
+    ('example_summary_prompt', 'Summarize the following text for a general audience: ', 'gpt-3.5-turbo', 'openai');
+
+    INSERT INTO prompts (name, prompt_text) VALUES
+    ('creative_writing_starter', 'Write a short story opening paragraph based on the following theme: a mysterious discovery in an old library.');
+    ```
+
+A future enhancement could include API endpoints or an admin interface for managing these prompts.

@@ -40,6 +40,13 @@ COPY --from=builder /usr/src/app/node_modules ./node_modules
 # Expose the port the app runs on
 EXPOSE 3001
 
+# Environment variables needed by the application:
+# - DATABASE_URL: Connection string for PostgreSQL.
+# - TIKA_URL: URL for the Apache Tika server.
+# - RABBITMQ_URL: Connection string for RabbitMQ (e.g., amqp://user:password@rabbitmq:5672).
+# - OPENAI_API_KEY: Your API key for OpenAI services.
+# These are typically set via docker-compose.yml or other runtime configuration methods.
+
 # Define the command to run the application
 # The existing "start" script in package.json is "node dist/index.js"
 CMD [ "npm", "start" ]

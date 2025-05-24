@@ -14,15 +14,18 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@types/cors": "^2.8.18",
+    "amqplib": "^0.10.8",
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "form-data": "^4.0.2",
     "multer": "^2.0.0",
+    "openai": "^4.103.0",
     "pg": "^8.16.0",
     "winston": "^3.10.0"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.7",
     "@types/express": "^5.0.2",
     "@types/jest": "^29.5.12",
     "@types/multer": "^1.4.12",

@@ -9,6 +9,10 @@ import { initializeDatabase, insertDocument, updateDocumentStatusAndText, getDoc
 import cors from 'cors';
 import logger from './util/logger';
 
+// Prompt Agent imports
+import { startWorker } from './prompt_agent/worker';
+import { initializePromptRoutes } from './prompt_agent/routes';
+
 // Helper to wrap async route handlers and pass errors to Express
 function wrapAsync(fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) {
   return function (req: Request, res: Response, next: NextFunction) {
@@ -237,6 +241,14 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await initializeDatabase(); // Initialize database connection and tables
+
+    // Initialize Prompt Agent routes and worker
+    // Note: initializePromptRoutes also attempts to connect to RabbitMQ for the API.
+    // startWorker also attempts to connect to RabbitMQ for the worker.
+    // Ensure RabbitMQ is running before starting the backend.
+    await initializePromptRoutes(app);
+    await startWorker(); // Starts the RabbitMQ worker
+
     app.listen(port, () => {
       logger.info(`Backend server listening at http://localhost:${port}`);
     });

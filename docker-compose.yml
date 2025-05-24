@@ -10,12 +10,18 @@ services:
     environment:
       - DATABASE_URL=postgresql://user:password@db:5432/document_processing
       - NODE_ENV=development
+      - RABBITMQ_URL=amqp://user:password@rabbitmq:5672
+      # OPENAI_API_KEY: "your_openai_api_key_here" # Set this in your local environment or .env file
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
     depends_on:
-      - db
-      - tika
+      db:
+        condition: service_started
+      tika:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     command: sh -c "npm install && npm run dev"
 
   frontend:
@@ -47,5 +53,17 @@ services:
     ports:
       - "9988:9998" # Default Tika port
 
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    ports:
+      - "5672:5672"  # For AMQP protocol
+      - "15672:15672" # For Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq # Persistent storage for RabbitMQ data
+    environment:
+      RABBITMQ_DEFAULT_USER: user # Optional: Set default user/pass
+      RABBITMQ_DEFAULT_PASS: password # Optional: Set default user/pass
+
 volumes:
   postgres_data:
+  rabbitmq_data: {}
